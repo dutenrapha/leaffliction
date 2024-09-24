@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from lightgbm import LGBMClassifier
 from sklearn.metrics import accuracy_score
 
+# Function to generate data and label from saved images
 def load_images_from_folder(folder):
     images = []
     labels = []
@@ -23,28 +24,35 @@ def load_images_from_folder(folder):
                 print('img_vector: ', img_vector.shape)
                 images.append(img_vector)
                 labels.append(label)
-                print('Labels: ', label)
                 a = np.array(images)
-                print(a.shape)
     return np.array(images), np.array(labels)
 
+# Generate x data (flattened images) and y labels (based on folder name)
 images, labels = load_images_from_folder('images/teste')
+print("========================")
 print('Images array: ', images.shape)
+print('labels: ', labels)
+print("========================")
 images = images.reshape(images.shape[0], -1)  # Flatten images to 2D array
 
 from sklearn.preprocessing import LabelEncoder
 
+# Encode folder names
 le = LabelEncoder()
 labels_encoded = le.fit_transform(labels)
 print('labels_encoded: ', labels_encoded)
 
+# Split test and train data
 X_train, X_test, y_train, y_test = train_test_split(images, labels_encoded, test_size=0.2, random_state=42)
 print('y_train: ', y_train, '  y_test: ', y_test)
 print('x_train: ', X_train.shape, '  x_test: ', X_test.shape)
+print("========================")
 
+# Fit model
 model = LGBMClassifier()
 model.fit(X_train, y_train)
 
+# Predict
 y_pred = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 print(f'Accuracy: {accuracy * 100:.2f}%')
