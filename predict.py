@@ -12,12 +12,19 @@ def predict(caminho_imagem, caminho_modelo):
     
     # Fazer a previsão
     previsao = model.predict(img_array)
-    classes = ['Saudável', 'Apple Scab', 'Black Rot', 'Cedar Apple Rust']
+    
+    classes = ['Black Rot', 'Saudável', 'Cedar Apple Rust', 'Apple Scab']
+
     print(f"Previsão: {classes[np.argmax(previsao)]}")
 
 # Exemplo de uso
-predict('./test_images/Unit_test1/Apple_Black_rot1.JPG', 'modelo_folhas.h5')
-predict('./test_images/Unit_test1/Apple_healthy1.JPG', 'modelo_folhas.h5')
-predict('./test_images/Unit_test1/Apple_healthy2.JPG', 'modelo_folhas.h5')
-predict('./test_images/Unit_test1/Apple_rust.JPG', 'modelo_folhas.h5')
-predict('./test_images/Unit_test1/Apple_scab.JPG', 'modelo_folhas.h5')
+predict('./images/transform/image (620).JPG', 'modelo_folhas.h5')
+predict('./images/transform/image (1640).JPG', 'modelo_folhas.h5')
+predict('./images/transform/image (31).JPG', 'modelo_folhas.h5')
+predict('./images/transform/image (8).JPG', 'modelo_folhas.h5')
+
+
+# predict('./test_images/Unit_test1/Apple_healthy1.JPG', 'modelo_folhas.h5')
+# predict('./test_images/Unit_test1/Apple_healthy2.JPG', 'modelo_folhas.h5')
+# predict('./test_images/Unit_test1/Apple_rust.JPG', 'modelo_folhas.h5')
+# predict('./test_images/Unit_test1/Apple_scab.JPG', 'modelo_folhas.h5')

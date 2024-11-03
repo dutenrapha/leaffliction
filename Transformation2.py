@@ -24,21 +24,17 @@ def transform(origpath):
     s = pcv.rgb2gray_hsv(rgb_img=img, channel="s")
     thresholded = pcv.threshold.binary(gray_img=s, threshold=125, object_type='light')
     
-    # Definir uma região de interesse (ROI)
-    contours, hierarchy = pcv.find_objects(img=img, mask=thresholded)
+    # Usando cv2.findContours ao invés da função do PlantCV
+    contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Definir uma região de interesse (ROI)
-    roi_contour, roi_hierarchy = pcv.roi.rectangle(img=img, x=0, y=0, h=256, w=256)
+    # Criar uma máscara vazia
+    kept_mask = np.zeros(img.shape[:2], dtype=np.uint8)
     
-    # Agrupar objetos dentro da ROI
-    roi_objects, hierarchy3, kept_mask, obj_area = pcv.cluster_contours(
-        img=img, roi_type='partial', roi_contour=roi_contour, object_hierarchy=hierarchy, object_contour=contours
-    )
+    # Desenhar todos os contornos na máscara
+    cv2.drawContours(kept_mask, contours, -1, (255), -1)
     
-    # Salvar ROI objects
-    cv2.imwrite(os.path.join(save_dir, f"{filename}_roi_objects.jpg"), kept_mask)
-
-
+    # Salvar a máscara
+    cv2.imwrite(os.path.join(savedir, f"{filename}_contours_mask.jpg"), kept_mask)
 
     print(f"Imagens transformadas salvas em {savedir}")
 
