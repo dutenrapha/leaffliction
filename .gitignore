@@ -1,3 +1,6 @@
 images
+augmented_images
+img_test
 test_dataset
 .venv
+.DS_Store

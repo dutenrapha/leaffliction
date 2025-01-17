@@ -55,4 +55,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     folder_counts = count_files_in_subfolders(directory)  # Count files in subfolders
+    print(folder_counts)
+    print(max(folder_counts.values()))
     create_charts(folder_counts)  # Generate and display charts

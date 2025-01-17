@@ -1,104 +1,93 @@
-from PIL import Image, ImageOps, ImageFilter, ImageEnhance
-import numpy as np
 import sys
 import os
-import random
+import shutil
+from PIL import Image, ImageOps
+import matplotlib.pyplot as plt
+from collections import defaultdict
 
-def flip_image(image):
-    return ImageOps.mirror(image)
+def is_jpg(filename):
+    return filename.lower().endswith('.jpg')
 
-def rotate_image(image):
-    angle = random.randint(1,180)
-    angle = random.choice([-1,1]) * angle
-    return image.rotate(angle)
+def aug(origpath, show_img):
+    img = Image.open(origpath)
+    imgfile = os.path.basename(origpath).split('.')[0]
+    pathaug = os.path.dirname(origpath)
 
-def skew_image(image):
-    xshift = abs(image.size[0] * 0.2)
-    new_width = image.size[0] + int(round(xshift))
-    return image.transform((new_width, image.size[1]), Image.AFFINE,
-                           (1, 0.2, -xshift if xshift > 0 else 0, 0, 1, 0),
-                           Image.BICUBIC)
+    augimages = {
+        'Flip': ImageOps.mirror(img),
+        'Rotate': img.rotate(90),
+        'Skew': img.transpose(Image.Transpose.ROTATE_180),
+        'Shear': img.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+        'Crop': img.crop((40, 40, img.size[0] - 40, img.size[1] - 40)),
+        'Distortion': img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    }
 
-def shear_image(image):
-    return image.transform(image.size, Image.AFFINE, (1, 0, 0, 0.2, 1, 0))
+    for nome, img_transformada in augimages.items():
+        img_transformada.save(f"{pathaug}/{imgfile}_{nome}.jpg")
 
-def crop_image(image):
-    """
-    Crop a random region of the image.
+    if show_img:
+        cols = 7
+        rows = 1
+        fig, axs = plt.subplots(rows, cols, figsize=(20, 5))
+        axs = axs.ravel()
 
-    :param image: PIL Image object.
-    :return: Cropped PIL Image object.
-    """
-    width, height = image.size
+        axs[0].imshow(img)
+        axs[0].set_title('Original')
+        axs[0].axis('off')
+        for i, (name, img) in enumerate(augimages.items()):
+            axs[i+1].imshow(img)
+            axs[i+1].set_title(name)
+            axs[i+1].axis('off')
 
-    crop_width = 100
-    crop_height = 100
+        for j in range(i+1, rows*cols):
+            axs[j].axis('off')
 
-    max_x = width - crop_width
-    max_y = height - crop_height
+        plt.tight_layout()
+        plt.show()
 
-    x = random.randint(0, max_x)
-    y = random.randint(0, max_y)
-
-    right = x + crop_width
-    bottom = y + crop_height
-    return image.crop((x, y, right, bottom))
-
-
-def blur_image(image):
-    return image.filter(ImageFilter.GaussianBlur(radius=5))
-
-def enhance_contrast(image):
-    enhancer = ImageEnhance.Contrast(image)
-    return enhancer.enhance(2.0)  # Increase contrast
-
-def scale_image(image, factor=1.5):
-    """
-    Scale the image by a given factor.
+def process_directory(directory):
+    # Create new directory with 'augmented' prefix
+    new_dir = f"augmented_{os.path.basename(directory)}"
+    if os.path.exists(new_dir):
+        shutil.rmtree(new_dir)
+    shutil.copytree(directory, new_dir)
     
-    :param image: PIL Image object.
-    :param factor: Scale factor.
-    :return: Scaled PIL Image object.
-    """
-    width, height = image.size
-    new_width = int(width * factor)
-    new_height = int(height * factor)
-    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-
-def enhance_illumination(image):
-    enhancer = ImageEnhance.Brightness(image)
-    return enhancer.enhance(1.5)
+    # Find subdirectory with most files
+    subdir_file_counts = defaultdict(int)
+    for root, _, files in os.walk(new_dir):
+        subdir_file_counts[root] = len(files)
+    
+    max_files_subdir = max(subdir_file_counts, key=subdir_file_counts.get)
+    n = subdir_file_counts[max_files_subdir]
+    
+    # Process subdirectories
+    for root, _, files in os.walk(new_dir):
+        print("Processing: ", root)
+        if root != max_files_subdir:
+            for file in files:
+                if is_jpg(file):
+                    file_path = os.path.join(root, file)
+                    aug(file_path, False)
+            
+            # Delete newest files if count exceeds n
+            files = [os.path.join(root, f) for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
+            files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
+            while len(files) > n:
+                os.remove(files.pop(0))
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python Augmentation.py [path_to_image]")
+        print("Usage: python Augmentation.py [path_to_image]: process single file and display images")
+        print("Usage: python Augmentation.py [path_to_dir]: process all files in the directory")
         sys.exit(1)
 
-    image_path = sys.argv[1]
-    if not os.path.exists(image_path):
-        print("Error: The file does not exist")
-        sys.exit(1)
-
-    image = Image.open(image_path)
-    transformations = {
-        'Flip': flip_image,
-        'Rotate': rotate_image,
-        'Skew': skew_image,
-        'Shear': shear_image,
-        'Crop': crop_image,
-        'Blur': blur_image,
-        'Contrast': enhance_contrast,
-        'Scaling': scale_image,
-        'Illumination': enhance_illumination
-    }
-
-    base_name, ext = os.path.splitext(os.path.basename(image_path))
-
-    for name, func in transformations.items():
-        temp = image
-        transformed_image = func(temp)
-        save_path = f"{base_name}_{name}{ext}"
-        transformed_image.save(save_path)
-        image = temp
-        print(f"Saved {save_path}")
+    cli_arg = sys.argv[1]
+    if os.path.isfile(cli_arg):
+        # Process single file and display images
+        aug(cli_arg, True)
+    elif os.path.isdir(cli_arg):
+        # Copy 'dir' to 'augmented_dir' and process all files, without displaying images
+        process_directory(cli_arg)
+    else:
+        print(f"Invalid argument: {cli_arg}")
