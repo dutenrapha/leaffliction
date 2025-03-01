@@ -33,4 +33,5 @@ def split_test_dataset(source_dir: str, test_dir: str, percentage: float):
 
     print(f"Divisão concluída. Imagens de teste movidas para '{test_dir}'.")
 
-split_test_dataset("images/apple", "test_dataset", 0.2)
+split_test_dataset("images/grape", "test_dataset_grape", 0.2)
+split_test_dataset("images/apple", "test_dataset_apple", 0.2)
