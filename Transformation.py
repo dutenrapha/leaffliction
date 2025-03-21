@@ -1,144 +1,106 @@
-import os
 import sys
+import os
+import shutil
 import cv2
 import numpy as np
+from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
 
+def is_jpg(filename):
+    return filename.lower().endswith('.jpg')
 
-def apply_image_transformations(image_path, output_dir):
-    """Applies various image transformations and saves the results.
+def transform(origpath, show_img):
+    img = cv2.imread(origpath)
+    filename = os.path.basename(origpath).split('.')[0]
+    
+    savedir = os.path.dirname(origpath)
 
-    These transformations are designed to extract key features from
-    plant images, which can be useful for tasks like plant
-    identification or disease detection.
+    blur_gaussiano = cv2.GaussianBlur(img, (15, 15), 0)
+    cv2.imwrite(os.path.join(savedir, f"{filename}_gaussian_blur.jpg"), blur_gaussiano)
 
-    Args:
-        image_path (str): Path to the original image.
-        output_dir (str): Path to the directory where the transformed
-            images will be saved.
-    """
-    img = cv2.imread(image_path)  # Loads the image using OpenCV
-    filename, ext = os.path.splitext(os.path.basename(image_path))
-    # Extracts filename and extension
+    blur_gray = cv2.cvtColor(blur_gaussiano, cv2.COLOR_BGR2GRAY)
+    cv2.imwrite(os.path.join(savedir, f"{filename}_gaussian_blur_bw.jpg"), blur_gray)
 
-    # 1. Gaussian Blur
-    # Reduces noise and fine details by averaging pixel values.
-    # Contributes to feature extraction by:
-    #   - Simplifying the image, making it easier to identify
-    #     broader shapes.
-    #   - Reducing the impact of minor imperfections or noise on
-    #     subsequent analysis.
-    blurred_img = cv2.GaussianBlur(img, (5, 5), 0)
-    cv2.imwrite(os.path.join(output_dir, f"{filename}_GaussianBlur{ext}"),
-                blurred_img)
+    _, mask = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 128, 255, cv2.THRESH_BINARY)
+    cv2.imwrite(os.path.join(savedir, f"{filename}_mask.jpg"), mask)
 
-    # 2. Mask (using color segmentation)
-    # Isolates regions based on color range (assumes green leaves).
-    # Contributes to feature extraction by:
-    #   - Segmenting the leaf from the background, allowing focus on
-    #     leaf-specific features.
-    #   - Creating a binary image where the leaf is white and the rest
-    #     is black, simplifying analysis.
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    # Convert to HSV color space (easier for color-based segmentation)
-    lower_green = np.array([35, 40, 40])  # Lower bound for green color range
-    upper_green = np.array([85, 255, 255])  # Upper bound for green color range
-    mask = cv2.inRange(hsv, lower_green, upper_green)
-    # Create a mask based on the color range
-    cv2.imwrite(os.path.join(output_dir, f"{filename}_Mask{ext}"), mask)
+    pcv.params.debug = None
+    s = pcv.rgb2gray_hsv(rgb_img=img, channel="s")
+    thresholded = pcv.threshold.binary(gray_img=s, threshold=125, object_type='light')
+    
+    # Usando cv2.findContours ao invés da função do PlantCV
+    contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Criar uma máscara vazia
+    kept_mask = np.zeros(img.shape[:2], dtype=np.uint8)
+    
+    # Desenhar todos os contornos na máscara
+    cv2.drawContours(kept_mask, contours, -1, (255), -1)
+    
+    # Salvar a máscara
+    cv2.imwrite(os.path.join(savedir, f"{filename}_contours_mask.jpg"), kept_mask)
 
-    # 3. ROI Objects (Region of Interest - Contours)
-    # Identifies outlines of objects in the binary mask.
-    # Contributes to feature extraction by:
-    #   - Enabling shape-based analysis, such as leaf area, perimeter,
-    #     and shape descriptors.
-    #   - Providing information about the number of leaves in the image.
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_SIMPLE)
-    # Find contours in the mask
-    img_contours = img.copy()
-    # Create a copy of the original image to draw contours on
-    cv2.drawContours(img_contours, contours, -1, (0, 255, 0), 2)
-    # Draws contours in green
-    cv2.imwrite(os.path.join(output_dir, f"{filename}_ROIObjects{ext}"),
-                img_contours)
+    # Display images if necessary
+    if show_img:
+        cols = 5
+        rows = 1
+        fig, axs = plt.subplots(rows, cols, figsize=(20, 5))
+        axs = axs.ravel()
 
-    # 4. Analyze Object (Largest Contour)
-    # Selects the largest contour, assuming it's the main leaf.
-    # Contributes to feature extraction by:
-    #   - Focusing on the primary leaf, reducing the impact of noise
-    #     or smaller objects.
-    #   - Simplifying the analysis by considering only the most
-    #     relevant object in the image.
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        # Find the contour with the largest area
-        img_largest_contour = img.copy()
-        # Create a copy of the original image
-        cv2.drawContours(img_largest_contour, [largest_contour], -1,
-                         (255, 0, 255), 3)
-        # Draws the largest contour in magenta
-        cv2.imwrite(os.path.join(output_dir,
-                                 f"{filename}_AnalyzeObject{ext}"),
-                    img_largest_contour)
+        axs[0].imshow(img)
+        axs[0].set_title('Original')
+        axs[0].axis('off')
+        axs[1].imshow(blur_gaussiano)
+        axs[1].set_title('Blur Gaussiano')
+        axs[1].axis('off')
+        axs[2].imshow(blur_gray)
+        axs[2].set_title('Blur BW')
+        axs[2].axis('off')
+        axs[3].imshow(mask)
+        axs[3].set_title('Contour Mask')
+        axs[3].axis('off')
+        axs[4].imshow(kept_mask)
+        axs[4].set_title('Mask')
+        axs[4].axis('off')
 
-    # 5. Pseudolandmarks (Extremal Points of Contour)
-    # Finds the leftmost, rightmost, topmost, and bottommost points of
-    # the contour.
-    # Contributes to feature extraction by:
-    #   - Providing key reference points for measuring leaf shape and
-    #     orientation.
-    #   - Enabling the calculation of shape-based features such as leaf
-    #     length, width, and aspect ratio.
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        # Find the contour with the largest area
-        extLeft = tuple(largest_contour[largest_contour[:, :, 0].argmin()][0])
-        # Find the leftmost point
-        extRight = tuple(largest_contour[largest_contour[:, :, 0].argmax()][0])
-        # Find the rightmost point
-        extTop = tuple(largest_contour[largest_contour[:, :, 1].argmin()][0])
-        # Find the topmost point
-        extBot = tuple(largest_contour[largest_contour[:, :, 1].argmax()][0])
-        # Find the bottommost point
+        plt.tight_layout()
+        plt.show()
 
-        img_landmarks = img.copy()  # Create a copy of the original image
-        cv2.circle(img_landmarks, extLeft, 8, (0, 0, 255), -1)  # Red
-        cv2.circle(img_landmarks, extRight, 8, (0, 255, 255), -1)  # Yellow
-        cv2.circle(img_landmarks, extTop, 8, (255, 0, 0), -1)  # Blue
-        cv2.circle(img_landmarks, extBot, 8, (255, 255, 0), -1)  # Cyan
+        print(f"Imagens transformadas salvas em {savedir}")
 
-        cv2.imwrite(os.path.join(output_dir,
-                                 f"{filename}_Pseudolandmarks{ext}"),
-                    img_landmarks)
+def delete_transformed_files(directory):
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if 'mask' in file or 'blur' in file:
+                file_path = os.path.join(root, file)
+                os.remove(file_path)
 
-    # 6. Color Histogram
-    # Plots and saves the color histogram of the image.
-    # Contributes to feature extraction by:
-    #   - Providing information about the color distribution in the leaf.
-    #   - Enabling the detection of color changes or abnormalities
-    #     that may indicate disease.
-    hist = cv2.calcHist([img], [0], None, [256], [0, 256])
-    # Calculate the color histogram
-
-    # Plot the histogram
-    plt.figure()
-    plt.title("Color Histogram")
-    plt.xlabel("Bins")
-    plt.ylabel("# of Pixels")
-    plt.plot(hist)  # Plot the histogram
-    plt.xlim([0, 256])  # Set the x-axis limits
-
-    # Save the plot as a JPG
-    plt.savefig(os.path.join(output_dir, f"{filename}_ColorHistogram.jpg"))
-    plt.close()
-
+def process_directory(directory):
+    new_dir = directory
+    delete_transformed_files(new_dir)
+    
+    # Process subdirectories
+    for root, _, files in os.walk(new_dir):
+        print("Processing: ", root)
+        #orig_files = [item for item in files if '_' not in item]
+        orig_files = files
+        for file in orig_files:
+            if is_jpg(file):
+                file_path = os.path.join(root, file)
+                transform(file_path, False)
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        image_path = sys.argv[1]
-        output_dir = os.path.dirname(image_path)
-        output_dir = "./"
-        apply_image_transformations(image_path, output_dir)
+    if len(sys.argv) != 2:
+        print("Usage: python Transformation.py [path_to_image]: process single file and display images")
+        print("Usage: python Transformation.py [path_to_dir]: process all files in the directory")
+        sys.exit(1)
+
+    cli_arg = sys.argv[1]
+    if os.path.isfile(cli_arg):
+        # Process single file and display images
+        transform(cli_arg, True)
+    elif os.path.isdir(cli_arg):
+        # Process all JPG files in subdirs
+        process_directory(cli_arg)
     else:
-        print("Usage: python transformation.py <image_path>")
+        print(f"Invalid argument: {cli_arg}")

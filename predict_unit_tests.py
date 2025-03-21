@@ -123,10 +123,10 @@ def predict_image(image_path, model_path, classes):
 
 # Unit tests
 APPLE_CLASSES = ['Black Rot', 'Healthy', 'Cedar Apple Rust', 'Apple Scab']
-GRAPE_CLASSES = ['Black Rot', 'Healthy', 'Esca', 'Spot']
+GRAPE_CLASSES = ['Black Rot', 'Esca', 'Healthy', 'Spot']
 
-apple_model = 'modelo_folhas_attention_apple.h5'
-grape_model = 'modelo_folhas_attention_grape.h5'
+apple_model = 'model_leaves_attention_apple.h5'
+grape_model = 'model_leaves_attention_grape.h5'
 
 
 # Apple unit tests

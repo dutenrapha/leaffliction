@@ -36,7 +36,7 @@ def attention_layer(inputs):
     return attention_output
 
 
-def train_model(directory):
+def train_model(directory, model_name):
     """
     Trains a convolutional neural network model on
     images from the given directory.
@@ -90,7 +90,9 @@ def train_model(directory):
     model.fit(train_data, epochs=150, validation_data=valid_data,
               callbacks=[early_stopping])
 
-    model.save("model_leaves_attention_grape.h5")
+    model.save(f"model_leaves_attention_{model_name}.h5")
 
 
-train_model("./images/grape")
+train_model("./images/apple", "apple")
+train_model("./images/grape", "grape")
+

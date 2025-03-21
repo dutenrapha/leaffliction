@@ -2,13 +2,13 @@ import sys
 import os
 import shutil
 from PIL import Image, ImageOps
-
+import matplotlib.pyplot as plt
+from collections import defaultdict
 
 def is_jpg(filename):
     return filename.lower().endswith('.jpg')
 
-
-def aug(origpath, filedir):
+def aug(origpath, show_img):
     img = Image.open(origpath)
     imgfile = os.path.basename(origpath).split('.')[0]
     pathaug = os.path.dirname(origpath)
@@ -22,79 +22,72 @@ def aug(origpath, filedir):
         'Distortion': img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     }
 
-    for nome, img_transfor in augimages.items():
-        if filedir == "dir":
-            img_transfor.save(f"{pathaug}/{imgfile}_{nome}.jpg")
-        else:
-            img_transfor.save(f"{imgfile}_{nome}.jpg")
+    for nome, img_transformada in augimages.items():
+        img_transformada.save(f"{pathaug}/{imgfile}_{nome}.jpg")
 
+    if show_img:
+        cols = 7
+        rows = 1
+        fig, axs = plt.subplots(rows, cols, figsize=(20, 5))
+        axs = axs.ravel()
 
-def process_directory(directory, dest_dir="augmented"):
-    if os.path.exists(dest_dir):
-        shutil.rmtree(dest_dir)
-    os.makedirs(dest_dir, exist_ok=True)
+        axs[0].imshow(img)
+        axs[0].set_title('Original')
+        axs[0].axis('off')
+        for i, (name, img) in enumerate(augimages.items()):
+            axs[i+1].imshow(img)
+            axs[i+1].set_title(name)
+            axs[i+1].axis('off')
 
-    total_files = sum(len(files) for _, _, files in os.walk(directory))
-    print(f"Total Files: {total_files}")
+        for j in range(i+1, rows*cols):
+            axs[j].axis('off')
 
-    counter = 0
-    for root, _, files in os.walk(directory):
-        dest_path = os.path.join(dest_dir, os.path.relpath(root, directory))
-        os.makedirs(dest_path, exist_ok=True)
+        plt.tight_layout()
+        plt.show()
 
-        for file in files:
-            src_file = os.path.join(root, file)
-            dest_file = os.path.join(dest_path, file)
-            shutil.copy(src_file, dest_file)
-            counter += 1
-            sys.stdout.write(f"\rFiles completed: {counter}/{total_files}")
-            sys.stdout.flush()
-    print("\n")
-
-    min_folder, min_count = min(
-        ((root, len(files)) for root, _,
-            files in os.walk(directory) if len(files) > 0),
-        key=lambda x: x[1],
-        default=(None, 0)
-    )
-    print(f"Minor folder: {min_folder}")
-    print(f"# Files: {min_count}")
-
+def process_directory(directory):
+    # Create new directory with 'augmented' prefix
+    new_dir = f"augmented_{os.path.basename(directory)}"
+    if os.path.exists(new_dir):
+        shutil.rmtree(new_dir)
+    shutil.copytree(directory, new_dir)
+    
+    # Find subdirectory with most files
+    subdir_file_counts = defaultdict(int)
+    for root, _, files in os.walk(new_dir):
+        subdir_file_counts[root] = len(files)
+    
+    max_files_subdir = max(subdir_file_counts, key=subdir_file_counts.get)
+    n = subdir_file_counts[max_files_subdir]
+    
     # Process subdirectories
-    for root, _, files in os.walk(dest_dir):
-        print("Processing:", root)
-        for file in files:
-            if is_jpg(file):
-                file_path = os.path.join(root, file)
-                aug(file_path, "dir")
-
-        # Delete newest files if count exceeds n
-        files_in_root = os.listdir(root)
-        jpg_files = [os.path.join(root, f) for f in files_in_root if is_jpg(f)]
-        jpg_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-
-        max_allowed = min_count * 6
-
-        if len(jpg_files) > max_allowed:
-            excess_files = jpg_files[max_allowed:]
-            print("Removing excess files...")
-            for file in excess_files:
-                try:
-                    os.remove(file)
-                except Exception as e:
-                    print(f"Erro ao remover {file}: {e}")
-
+    for root, _, files in os.walk(new_dir):
+        print("Processing: ", root)
+        if root != max_files_subdir:
+            for file in files:
+                if is_jpg(file):
+                    file_path = os.path.join(root, file)
+                    aug(file_path, False)
+            
+            # Delete newest files if count exceeds n
+            files = [os.path.join(root, f) for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
+            files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
+            while len(files) > n:
+                os.remove(files.pop(0))
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python Augmentation.py [path_to_image] or "
-              "[path_to_directory]")
+        print("Usage: python Augmentation.py [path_to_image]: process single file and display images")
+        print("Usage: python Augmentation.py [path_to_dir]: process all files in the directory")
         sys.exit(1)
 
     cli_arg = sys.argv[1]
     if os.path.isfile(cli_arg):
-        aug(cli_arg, "file")
+        # Process single file and display images
+        aug(cli_arg, True)
     elif os.path.isdir(cli_arg):
+        # Copy 'dir' to 'augmented_dir' and process all files, without displaying images
         process_directory(cli_arg)
     else:
         print(f"Invalid argument: {cli_arg}")
