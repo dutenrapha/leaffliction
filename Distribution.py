@@ -9,11 +9,12 @@ def count_files_in_subfolders(directory):
     :param directory: Path to the directory to scan.
     :return: A dictionary with folder names as keys and file count as values.
     """
-    folder_counts = {}
-    for entry in os.scandir(directory):
-        if entry.is_dir():  # Check if the entry is a directory
-            folder_counts[entry.name] = len(os.listdir(entry.path))
-    return folder_counts
+    file_counts = {}
+
+    for root_dir, dirs, files in os.walk(directory):
+        file_counts[root_dir] = len(files)
+
+    return file_counts
 
 def create_charts(folder_counts):
     """

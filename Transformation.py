@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 def is_jpg(filename):
     return filename.lower().endswith('.jpg')
 
-def transform(origpath, show_img):
+def transform(origpath, output_path, show_img):
     img = cv2.imread(origpath)
     filename = os.path.basename(origpath).split('.')[0]
     
-    savedir = os.path.dirname(origpath)
+    savedir = os.path.basename(output_path)
 
     blur_gaussiano = cv2.GaussianBlur(img, (15, 15), 0)
     cv2.imwrite(os.path.join(savedir, f"{filename}_gaussian_blur.jpg"), blur_gaussiano)
@@ -40,9 +40,18 @@ def transform(origpath, show_img):
     # Salvar a máscara
     cv2.imwrite(os.path.join(savedir, f"{filename}_contours_mask.jpg"), kept_mask)
 
+
+    # Laplace Filter
+    lp_img = pcv.laplace_filter(gray_img=img, ksize=3, scale=1)
+    cv2.imwrite(os.path.join(savedir, f"{filename}_laplace.jpg"), lp_img)
+
+    # Sobel filter
+    sobel = pcv.sobel_filter(gray_img=img, dx=1, dy=0, ksize=3)
+    cv2.imwrite(os.path.join(savedir, f"{filename}_sobel.jpg"), sobel)
+
     # Display images if necessary
     if show_img:
-        cols = 5
+        cols = 7
         rows = 1
         fig, axs = plt.subplots(rows, cols, figsize=(20, 5))
         axs = axs.ravel()
@@ -62,6 +71,12 @@ def transform(origpath, show_img):
         axs[4].imshow(kept_mask)
         axs[4].set_title('Mask')
         axs[4].axis('off')
+        axs[5].imshow(lp_img)
+        axs[5].set_title('Laplace Filter')
+        axs[5].axis('off')
+        axs[6].imshow(sobel)
+        axs[6].set_title('Sobel Filter')
+        axs[6].axis('off')
 
         plt.tight_layout()
         plt.show()
@@ -75,7 +90,7 @@ def delete_transformed_files(directory):
                 file_path = os.path.join(root, file)
                 os.remove(file_path)
 
-def process_directory(directory):
+def process_directory(directory, output_path):
     new_dir = directory
     delete_transformed_files(new_dir)
     
@@ -87,20 +102,26 @@ def process_directory(directory):
         for file in orig_files:
             if is_jpg(file):
                 file_path = os.path.join(root, file)
-                transform(file_path, False)
+                transform(file_path, output_path, False)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 and len(sys.argv) != 3:
         print("Usage: python Transformation.py [path_to_image]: process single file and display images")
         print("Usage: python Transformation.py [path_to_dir]: process all files in the directory")
         sys.exit(1)
 
-    cli_arg = sys.argv[1]
-    if os.path.isfile(cli_arg):
-        # Process single file and display images
-        transform(cli_arg, True)
-    elif os.path.isdir(cli_arg):
-        # Process all JPG files in subdirs
-        process_directory(cli_arg)
-    else:
-        print(f"Invalid argument: {cli_arg}")
+    # Process single file and display images
+    if len(sys.argv) == 2:
+        cli_arg = sys.argv[1]
+        if os.path.isfile(cli_arg):
+            transform(cli_arg, cli_arg, True)
+        else:
+            print(f"Invalid argument: {cli_arg}")
+    # Process all JPG files in subdirs
+    if len(sys.argv) == 3:
+        cli_arg = sys.argv[1]
+        output_path = sys.argv[2]
+        if os.path.isdir(cli_arg) and os.path.isdir(output_path):
+            process_directory(cli_arg, output_path)
+        else:
+            print(f"Invalid argument: {cli_arg}")
