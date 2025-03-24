@@ -9,12 +9,36 @@ import matplotlib.pyplot as plt
 def is_jpg(filename):
     return filename.lower().endswith('.jpg')
 
+def generate_output_dir(full_path, output_dir):
+    """
+    Substitute the root directory of a full file path with a specified output directory, excluding the filename.
+
+    Parameters:
+    - full_path (str): The full path of the file.
+    - output_dir (str): The new root directory.
+
+    Returns:
+    - str: The modified path with the new root directory, excluding the filename.
+    """
+    # Split the full path into components
+    path_components = full_path.split(os.sep)
+    
+    # Remove the first component (the original root) and the last component (the filename)
+    relative_components = path_components[1:-1]
+    
+    # Construct the new path with the output directory as the root
+    new_path = os.path.join(output_dir, *relative_components)
+    
+    return new_path
+
 def transform(origpath, output_path, show_img):
     img = cv2.imread(origpath)
     filename = os.path.basename(origpath).split('.')[0]
     
-    savedir = os.path.basename(output_path)
+    #savedir = os.path.dirname(output_path)
+    savedir = generate_output_dir(origpath, output_path)
 
+    #print(savedir, filename)
     blur_gaussiano = cv2.GaussianBlur(img, (15, 15), 0)
     cv2.imwrite(os.path.join(savedir, f"{filename}_gaussian_blur.jpg"), blur_gaussiano)
 
@@ -91,9 +115,10 @@ def delete_transformed_files(directory):
                 os.remove(file_path)
 
 def process_directory(directory, output_path):
-    new_dir = directory
-    delete_transformed_files(new_dir)
     
+    new_dir = directory
+    #delete_transformed_files(new_dir)
+
     # Process subdirectories
     for root, _, files in os.walk(new_dir):
         print("Processing: ", root)
@@ -107,7 +132,7 @@ def process_directory(directory, output_path):
 if __name__ == "__main__":
     if len(sys.argv) != 2 and len(sys.argv) != 3:
         print("Usage: python Transformation.py [path_to_image]: process single file and display images")
-        print("Usage: python Transformation.py [path_to_dir]: process all files in the directory")
+        print("Usage: python Transformation.py [path_to_dir] [output_path]: process all files in path_to_dir and saves in output_path (must be different)")
         sys.exit(1)
 
     # Process single file and display images
@@ -121,6 +146,10 @@ if __name__ == "__main__":
     if len(sys.argv) == 3:
         cli_arg = sys.argv[1]
         output_path = sys.argv[2]
+        # Create new directory if necessary
+        if os.path.exists(output_path):
+            shutil.rmtree(output_path)
+        shutil.copytree(cli_arg, output_path)
         if os.path.isdir(cli_arg) and os.path.isdir(output_path):
             process_directory(cli_arg, output_path)
         else:
