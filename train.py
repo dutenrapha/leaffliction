@@ -74,6 +74,6 @@ def trainmodel(diretorio):
     
     model.fit(traindata, epochs=150, validation_data=validdata, callbacks=[early_stopping])
 
-    model.save('modelo_folhas_attention_grape.h5')
+    model.save('modelo_folhas_attention_grape_temp.h5')
 
 trainmodel('./images/grape')
