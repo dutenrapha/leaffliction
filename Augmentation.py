@@ -91,3 +91,4 @@ if __name__ == "__main__":
         process_directory(cli_arg)
     else:
         print(f"Invalid argument: {cli_arg}")
+
