@@ -1,15 +1,18 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.layers import (
     Dense,
     GlobalAveragePooling2D,
-    Conv2D,
-    MaxPooling2D,
     Input,
     Multiply,
+    Flatten,
+    Activation,
+    Reshape
 )
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping
+import subprocess
 
 if tf.config.list_physical_devices("GPU"):
     print("GPU is available for training.")
@@ -25,23 +28,19 @@ def attention_layer(inputs):
     :return: Tensor after applying attention.
     """
     attention_scores = Dense(1, activation="sigmoid")(inputs)
-    attention_scores = tf.keras.layers.Flatten()(attention_scores)
-
-    attention_weights = tf.keras.layers.Activation("softmax")(attention_scores)
-    attention_weights = tf.keras.layers.Reshape(
-        (inputs.shape[1], inputs.shape[2], 1)
-    )(attention_weights)
-
+    attention_scores = Flatten()(attention_scores)
+    attention_weights = Activation("softmax")(attention_scores)
+    attention_weights = Reshape((inputs.shape[1], inputs.shape[2], 1))(attention_weights)
     attention_output = Multiply()([inputs, attention_weights])
     return attention_output
 
 
 def train_model(directory, model_name):
     """
-    Trains a convolutional neural network model on
-    images from the given directory.
+    Trains a model with EfficientNetB0 and custom attention.
 
     :param directory: Path to the directory containing image subdirectories.
+    :param model_name: Name used to save the trained model.
     """
     train_datagen = ImageDataGenerator(rescale=1.0 / 255, validation_split=0.2)
 
@@ -61,49 +60,48 @@ def train_model(directory, model_name):
         subset="validation",
     )
 
+    base_model = EfficientNetB0(
+        input_shape=(150, 150, 3),
+        include_top=False,
+        weights="imagenet"
+    )
+    base_model.trainable = False  # Congela o backbone
+
     inputs = Input(shape=(150, 150, 3))
-
-    x = Conv2D(32, (3, 3), activation="relu")(inputs)
-    x = MaxPooling2D(2, 2)(x)
-
-    x = Conv2D(64, (3, 3), activation="relu")(x)
-    x = MaxPooling2D(2, 2)(x)
-
-    x = Conv2D(128, (3, 3), activation="relu")(x)
-    x = MaxPooling2D(2, 2)(x)
-
+    x = base_model(inputs, training=False)
     x = attention_layer(x)
-
     x = GlobalAveragePooling2D()(x)
     x = Dense(512, activation="relu")(x)
     outputs = Dense(4, activation="softmax")(x)
 
-    early_stopping = EarlyStopping(
-        monitor="val_loss", patience=5, restore_best_weights=True,
-        verbose=1)
-
     model = Model(inputs=inputs, outputs=outputs)
 
-    model.compile(optimizer="adam", loss="categorical_crossentropy",
-                  metrics=["accuracy"])
+    model.compile(
+        optimizer="adam",
+        loss="categorical_crossentropy",
+        metrics=["accuracy"]
+    )
 
-    model.fit(train_data, epochs=150, validation_data=valid_data,
-              callbacks=[early_stopping])
+    early_stopping = EarlyStopping(
+        monitor="val_loss", patience=5, restore_best_weights=True, verbose=1
+    )
 
-    model.save(f"model_leaves_attention_{model_name}.h5")
+    model.fit(
+        train_data,
+        epochs=150,
+        validation_data=valid_data,
+        callbacks=[early_stopping]
+    )
 
+    model.save(f"model_leaves_effnet_attention_{model_name}.h5")
 
 
 if __name__ == '__main__':
+    # print("Executando augmentation.py...")
+    # subprocess.run(['python', 'Augmentation.py', 'images'], check=True)
 
-    import subprocess
+    # print("Executando transformation.py...")
+    # subprocess.run(['python', 'Transformation.py', 'augmented_images', 'transformed_images'], check=True)
 
-    print("Executando augmentation.py...")
-    subprocess.run(['python', 'Augmentation.py', 'images'], check=True)
-    
-    print("Executando transformation.py...")
-    subprocess.run(['python', 'Transformation.py', 'augmented_images', 'transformed_images'], check=True)
-    
     train_model("./transformed_images/apple", "apple")
     train_model("./transformed_images/grape", "grape")
-
