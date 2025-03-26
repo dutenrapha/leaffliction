@@ -30,7 +30,6 @@ keras==3.8.0
 kiwisolver==1.4.8
 lazy_loader==0.4
 libclang==18.1.1
-locket==1.0.0
 Markdown==3.7
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
@@ -89,6 +88,7 @@ statsmodels==0.14.4
 tblib==3.0.0
 tensorboard==2.18.0
 tensorboard-data-server==0.7.2
+tensorflow==2.18.0
 tensorflow==2.18.0
 tensorflow-io-gcs-filesystem==0.37.1
 termcolor==2.5.0

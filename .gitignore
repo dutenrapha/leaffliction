@@ -1,7 +1,10 @@
 images
+augmented_images
+transformed_images
+
+img_test
 test_dataset
 .venv
-test_dataset_grape
-test_dataset_apple
-modelo_folhas_attention_grape.h5
-modelo_folhas_attention_apple.h5
+.DS_Store
+*.h5
+
