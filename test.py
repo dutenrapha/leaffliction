@@ -12,7 +12,8 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping
-import subprocess
+# import subprocess
+
 
 if tf.config.list_physical_devices("GPU"):
     print("GPU is available for training.")
@@ -30,7 +31,8 @@ def attention_layer(inputs):
     attention_scores = Dense(1, activation="sigmoid")(inputs)
     attention_scores = Flatten()(attention_scores)
     attention_weights = Activation("softmax")(attention_scores)
-    attention_weights = Reshape((inputs.shape[1], inputs.shape[2], 1))(attention_weights)
+    attention_weights = Reshape((inputs.shape[1], inputs.shape[2],
+                                 1))(attention_weights)
     attention_output = Multiply()([inputs, attention_weights])
     return attention_output
 
@@ -97,11 +99,5 @@ def train_model(directory, model_name):
 
 
 if __name__ == '__main__':
-    # print("Executando augmentation.py...")
-    # subprocess.run(['python', 'Augmentation.py', 'images'], check=True)
-
-    # print("Executando transformation.py...")
-    # subprocess.run(['python', 'Transformation.py', 'augmented_images', 'transformed_images'], check=True)
-
     train_model("./transformed_images/apple", "apple")
     train_model("./transformed_images/grape", "grape")

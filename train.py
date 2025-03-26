@@ -93,17 +93,17 @@ def train_model(directory, model_name):
     model.save(f"model_leaves_attention_{model_name}.h5")
 
 
-
 if __name__ == '__main__':
-
     import subprocess
 
     print("Executando augmentation.py...")
-    subprocess.run(['python', 'Augmentation.py', 'images'], check=True)
-    
+    subprocess.run(['python', 'Augmentation.py',
+                    'images'], check=True)
+
     print("Executando transformation.py...")
-    subprocess.run(['python', 'Transformation.py', 'augmented_images', 'transformed_images'], check=True)
-    
+    subprocess.run(['python', 'Transformation.py',
+                    'augmented_images',
+                    'transformed_images'], check=True)
+
     train_model("./transformed_images/apple", "apple")
     train_model("./transformed_images/grape", "grape")
-

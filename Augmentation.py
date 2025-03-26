@@ -5,8 +5,10 @@ from PIL import Image, ImageOps
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
+
 def is_jpg(filename):
     return filename.lower().endswith('.jpg')
+
 
 def aug(origpath, show_img):
     img = Image.open(origpath)
@@ -45,21 +47,22 @@ def aug(origpath, show_img):
         plt.tight_layout()
         plt.show()
 
+
 def process_directory(directory):
     # Create new directory with 'augmented' prefix
     new_dir = f"augmented_{os.path.basename(directory)}"
     if os.path.exists(new_dir):
         shutil.rmtree(new_dir)
     shutil.copytree(directory, new_dir)
-    
+
     # Find subdirectory with most files
     subdir_file_counts = defaultdict(int)
     for root, _, files in os.walk(new_dir):
         subdir_file_counts[root] = len(files)
-    
+
     max_files_subdir = max(subdir_file_counts, key=subdir_file_counts.get)
     n = subdir_file_counts[max_files_subdir]
-    
+
     # Process subdirectories
     for root, _, files in os.walk(new_dir):
         print("Processing: ", root)
@@ -68,18 +71,22 @@ def process_directory(directory):
                 if is_jpg(file):
                     file_path = os.path.join(root, file)
                     aug(file_path, False)
-            
+
             # Delete newest files if count exceeds n
-            files = [os.path.join(root, f) for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
+            files = [os.path.join(root, f) for f in os.listdir(root)
+                     if os.path.isfile(os.path.join(root, f))]
             files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-            
+
             while len(files) > n:
                 os.remove(files.pop(0))
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python Augmentation.py [path_to_image]: process single file and display images")
-        print("Usage: python Augmentation.py [path_to_dir]: process all files in the directory")
+        print("Usage: python Augmentation.py [path_to_image]: "
+              "process single file and display images")
+        print("Usage: python Augmentation.py [path_to_dir]: "
+              "process all files in the directory")
         sys.exit(1)
 
     cli_arg = sys.argv[1]
@@ -87,8 +94,8 @@ if __name__ == "__main__":
         # Process single file and display images
         aug(cli_arg, True)
     elif os.path.isdir(cli_arg):
-        # Copy 'dir' to 'augmented_dir' and process all files, without displaying images
+        # Copy 'dir' to 'augmented_dir' and process
+        # all files, without displaying images
         process_directory(cli_arg)
     else:
         print(f"Invalid argument: {cli_arg}")
-
