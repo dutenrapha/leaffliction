@@ -3,8 +3,10 @@ augmented_images
 transformed_images
 
 img_test
-test_dataset
+test_dataset_apple
+test_dataset_grape
+test_images
 .venv
 .DS_Store
 *.h5
-
+*.pth

@@ -1,109 +1,126 @@
-import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.layers import (
-    Dense,
-    GlobalAveragePooling2D,
-    Conv2D,
-    MaxPooling2D,
-    Input,
-    Multiply,
-)
-from tensorflow.keras.models import Model
-from tensorflow.keras.callbacks import EarlyStopping
-
-if tf.config.list_physical_devices("GPU"):
-    print("GPU is available for training.")
-else:
-    print("GPU is not available. Training will be done on CPU.")
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
+from torchvision import transforms, datasets
+from transformers import ViTForImageClassification, ViTFeatureExtractor
 
 
-def attention_layer(inputs):
-    """
-    Applies an attention mechanism to the input tensor.
 
-    :param inputs: Input tensor.
-    :return: Tensor after applying attention.
-    """
-    attention_scores = Dense(1, activation="sigmoid")(inputs)
-    attention_scores = tf.keras.layers.Flatten()(attention_scores)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("✅ GPU available" if torch.cuda.is_available() else "⚠️ Training on CPU")
 
-    attention_weights = tf.keras.layers.Activation("softmax")(attention_scores)
-    attention_weights = tf.keras.layers.Reshape(
-        (inputs.shape[1], inputs.shape[2], 1)
-    )(attention_weights)
+def train_model(data_dir, model_name, num_epochs=50, batch_size=32, lr=1e-4, patience=5):
 
-    attention_output = Multiply()([inputs, attention_weights])
-    return attention_output
+    feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+    
 
+    train_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(10),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+    ])
+    
+    val_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+    ])
+    
+    full_dataset = datasets.ImageFolder(root=data_dir, transform=train_transform)
+    
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    
 
-def train_model(directory, model_name):
-    """
-    Trains a convolutional neural network model on
-    images from the given directory.
+    train_dataset.dataset.transform = train_transform
+    val_dataset.dataset.transform = val_transform
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    
 
-    :param directory: Path to the directory containing image subdirectories.
-    """
-    train_datagen = ImageDataGenerator(rescale=1.0 / 255, validation_split=0.2)
+    model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224-in21k", num_labels=4)
 
-    train_data = train_datagen.flow_from_directory(
-        directory,
-        target_size=(150, 150),
-        batch_size=32,
-        class_mode="categorical",
-        subset="training",
-    )
-
-    valid_data = train_datagen.flow_from_directory(
-        directory,
-        target_size=(150, 150),
-        batch_size=32,
-        class_mode="categorical",
-        subset="validation",
-    )
-
-    inputs = Input(shape=(150, 150, 3))
-
-    x = Conv2D(32, (3, 3), activation="relu")(inputs)
-    x = MaxPooling2D(2, 2)(x)
-
-    x = Conv2D(64, (3, 3), activation="relu")(x)
-    x = MaxPooling2D(2, 2)(x)
-
-    x = Conv2D(128, (3, 3), activation="relu")(x)
-    x = MaxPooling2D(2, 2)(x)
-
-    x = attention_layer(x)
-
-    x = GlobalAveragePooling2D()(x)
-    x = Dense(512, activation="relu")(x)
-    outputs = Dense(4, activation="softmax")(x)
-
-    early_stopping = EarlyStopping(
-        monitor="val_loss", patience=5, restore_best_weights=True,
-        verbose=1)
-
-    model = Model(inputs=inputs, outputs=outputs)
-
-    model.compile(optimizer="adam", loss="categorical_crossentropy",
-                  metrics=["accuracy"])
-
-    model.fit(train_data, epochs=150, validation_data=valid_data,
-              callbacks=[early_stopping])
-
-    model.save(f"model_leaves_attention_{model_name}.h5")
-
+    for param in model.vit.parameters():
+        param.requires_grad = False
+    model.to(device)
+    
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
+    
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        
+        for images, labels in train_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(images).logits
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            
+            running_loss += loss.item() * images.size(0)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+        
+        train_loss = running_loss / total
+        train_accuracy = correct / total
+        
+        model.eval()
+        val_loss = 0.0
+        correct_val = 0
+        total_val = 0
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images = images.to(device)
+                labels = labels.to(device)
+                outputs = model(images).logits
+                loss = criterion(outputs, labels)
+                val_loss += loss.item() * images.size(0)
+                _, predicted = torch.max(outputs, 1)
+                total_val += labels.size(0)
+                correct_val += (predicted == labels).sum().item()
+        val_loss /= total_val
+        val_accuracy = correct_val / total_val
+        
+        print(f"Epoch [{epoch+1}/{num_epochs}] | Train Loss: {train_loss:.4f} | Train Acc: {train_accuracy:.4f} | "
+              f"Val Loss: {val_loss:.4f} | Val Acc: {val_accuracy:.4f}")
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= patience:
+                print(f"Early stopping at epoch {epoch+1} with Val Loss: {val_loss:.4f}")
+                break
+    
+    torch.save(model.state_dict(), f"model_vit_hf_{model_name}_final.pth")
+    print("Training completed.")
 
 if __name__ == '__main__':
     import subprocess
+    import time
 
-    print("Executando augmentation.py...")
-    subprocess.run(['python', 'Augmentation.py',
-                    'images'], check=True)
+    inicio = time.time()
 
-    print("Executando transformation.py...")
-    subprocess.run(['python', 'Transformation.py',
-                    'augmented_images',
-                    'transformed_images'], check=True)
+    subprocess.run(['python', 'Augmentation.py', 'images'], check=True)
+    
+    train_model("./augmented_images/apple", "apple", num_epochs=30, batch_size=32, lr=1e-4, patience=5)
+    train_model("./augmented_images/grape", "grape", num_epochs=30, batch_size=32, lr=1e-4, patience=5)
 
-    train_model("./transformed_images/apple", "apple")
-    train_model("./transformed_images/grape", "grape")
+    fim = time.time()
+    print(f"Training completed in {fim - inicio} seconds")

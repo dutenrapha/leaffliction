@@ -1,94 +1,113 @@
-import tensorflow as tf
-import numpy as np
 import os
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import (
+    confusion_matrix, ConfusionMatrixDisplay, accuracy_score,
+    precision_score, recall_score, f1_score
+)
+from transformers import ViTForImageClassification
 
 
-def predict_directory(caminho_diretorio, caminho_modelo):
-    # Verificar se o diretório existe
-    if not os.path.exists(caminho_diretorio):
-        raise FileNotFoundError(f"O diretório '{caminho_diretorio}'"
-                                "não existe")
+def predict_directory(dir_path, model_path, image_size=(224, 224), device=None):
+    """
+    Predicts images in a directory using a pre-trained PyTorch model.
 
-    if not os.path.exists(caminho_modelo):
-        raise FileNotFoundError(f"O modelo '{caminho_modelo}' não existe")
+    Args:
+        dir_path (str): Path to the directory containing class folders.
+        model_path (str): Path to the trained PyTorch model (.pth).
+        image_size (tuple): Target size for image resizing (width, height).
+        device (str or torch.device): Device to run inference on.
+    """
+    if not os.path.exists(dir_path):
+        raise FileNotFoundError(f"The directory '{dir_path}' does not exist")
 
-    # Carregar o modelo
-    model = tf.keras.models.load_model(caminho_modelo)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"The model '{model_path}' does not exist")
 
-    # Definir as classes de acordo com as pastas no diretório
-    classes = [d for d in sorted(os.listdir(caminho_diretorio))
-               if os.path.isdir(os.path.join(caminho_diretorio, d))]
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+
+    model = ViTForImageClassification.from_pretrained(
+        "google/vit-base-patch16-224-in21k",
+        num_labels=4
+    )
+
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
+    model.eval()
+
+    transform = transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5]*3, [0.5]*3)
+    ])
+
+    classes = [d for d in sorted(os.listdir(dir_path))
+               if os.path.isdir(os.path.join(dir_path, d))]
 
     if not classes:
-        raise ValueError("Nenhuma pasta de classe encontrada no diretório")
+        raise ValueError("No class folders found in the directory")
 
     true_labels = []
     predicted_labels = []
 
-    # Iterar pelas pastas e imagens dentro delas
     for class_index, class_name in enumerate(classes):
-        class_path = os.path.join(caminho_diretorio, class_name)
+        class_path = os.path.join(dir_path, class_name)
         images = [f for f in os.listdir(class_path)
                   if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
         if not images:
-            print(f"Aviso: Nenhuma imagem encontrada na pasta '{class_name}'")
+            print(f"Warning: No images found in the folder '{class_name}'")
             continue
 
         for image_name in images:
             image_path = os.path.join(class_path, image_name)
             try:
-                # Pré-processar a imagem
-                img = tf.keras.preprocessing.image.load_img(image_path,
-                                                            target_size=(150,
-                                                                         150))
-                img_array = tf.keras.preprocessing.image.img_to_array(img)
-                img_array = np.expand_dims(img_array, axis=0) / 255.0
+                img = Image.open(image_path).convert("RGB")
+                img_tensor = transform(img).unsqueeze(0).to(device)
 
-                # Fazer a previsão Desabilitar verbose
-                previsao = model.predict(img_array, verbose=0)
-                predicted_class_index = np.argmax(previsao)
+                with torch.no_grad():
+                    outputs = model(img_tensor)
+                    probs = F.softmax(outputs.logits, dim=1)
+                    predicted_class_index = torch.argmax(probs, dim=1).item()
 
-                # Armazenar rótulos verdadeiros e preditos
                 true_labels.append(class_index)
                 predicted_labels.append(predicted_class_index)
+
             except Exception as e:
-                print(f"Erro ao processar imagem {image_path}: {str(e)}")
+                print(f"Error processing image {image_path}: {str(e)}")
 
     if not true_labels:
-        raise ValueError("Nenhuma imagem foi processada com sucesso")
+        raise ValueError("No images were successfully processed")
 
-    # Calcular métricas
+    # Metrics
     accuracy = accuracy_score(true_labels, predicted_labels)
-    precision = precision_score(true_labels, predicted_labels,
-                                verage='weighted')
+    precision = precision_score(true_labels, predicted_labels, average='weighted')
     recall = recall_score(true_labels, predicted_labels, average='weighted')
     f1 = f1_score(true_labels, predicted_labels, average='weighted')
 
-    # Gerar e plotar a matriz de confusão
+    # Confusion matrix
     cm = confusion_matrix(true_labels, predicted_labels)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes)
-    plt.figure(figsize=(10, 8))  # Aumentar tamanho da figura
+    plt.figure(figsize=(10, 8))
     disp.plot(cmap=plt.cm.Blues, ax=plt.gca(), xticks_rotation=45)
-    plt.title("Matriz de Confusão")
+    plt.title("Confusion Matrix")
 
-    # Adicionar métricas no gráfico
     metrics_text = (
-        f"Acurácia: {accuracy:.2f}\n"
-        f"Precisão: {precision:.2f}\n"
+        f"Accuracy: {accuracy:.2f}\n"
+        f"Precision: {precision:.2f}\n"
         f"Recall: {recall:.2f}\n"
         f"F1-Score: {f1:.2f}"
     )
     plt.gca().text(1.2, 0.6, metrics_text, transform=plt.gca().transAxes,
-                   verticalalignment='top', bbox=dict(facecolor='white',
-                                                      alpha=0.5))
+                   verticalalignment='top',
+                   bbox=dict(facecolor='white', alpha=0.5))
 
     plt.show()
 
-
-# Exemplo de uso
-predict_directory('./test_dataset', 'modelo_folhas_attention.h5')
+if __name__ == '__main__':
+    predict_directory('./test_dataset_apple', 'model_vit_hf_apple_final.pth')
+    predict_directory('./test_dataset_grape', 'model_vit_hf_grape_final.pth')

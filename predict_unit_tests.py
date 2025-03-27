@@ -1,154 +1,86 @@
+
 import os
-import numpy as np
-import tensorflow as tf
-import matplotlib.pyplot as plt
-from sklearn.metrics import (
-    confusion_matrix, ConfusionMatrixDisplay, accuracy_score,
-    precision_score, recall_score, f1_score
-)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'  
+os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir='  
 
 
-def predict_directory(dir_path, model_path):
-    """
-    Predicts images in a directory using a pre-trained model.
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
 
-    Args:
-        dir_path (str): Path to the directory containing class folders.
-        model_path (str): Path to the trained model file.
-    """
-    # Verify if the directory exists
-    if not os.path.exists(dir_path):
-        raise FileNotFoundError(f"The directory '{dir_path}' does not exist")
+from transformers import ViTForImageClassification, ViTImageProcessor
+from transformers import logging
 
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"The model '{model_path}' does not exist")
+logging.set_verbosity_error()
 
-    # Load the trained model
-    model = tf.keras.models.load_model(model_path)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Define class labels based on folder names
-    classes = [d for d in sorted(os.listdir(dir_path))
-               if os.path.isdir(os.path.join(dir_path, d))]
+image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    if not classes:
-        raise ValueError("No class folders found in the directory")
+def get_transform():
+    return transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=image_processor.image_mean,
+                             std=image_processor.image_std)
+    ])
 
-    true_labels = []
-    predicted_labels = []
+def load_model(model_path, num_classes):
 
-    # Iterate through class folders and images
-    for class_index, class_name in enumerate(classes):
-        class_path = os.path.join(dir_path, class_name)
-        images = [f for f in os.listdir(class_path)
-                  if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-
-        if not images:
-            print(f"Warning: No images found in the folder '{class_name}'")
-            continue
-
-        for image_name in images:
-            image_path = os.path.join(class_path, image_name)
-            try:
-                # Preprocess the image
-                img = tf.keras.preprocessing.image.load_img(
-                    image_path, target_size=(150, 150)
-                )
-                img_array = tf.keras.preprocessing.image.img_to_array(img)
-                img_array = np.expand_dims(img_array, axis=0) / 255.0
-
-                # Make prediction
-                prediction = model.predict(img_array, verbose=0)
-                predicted_class_index = np.argmax(prediction)
-
-                # Store true and predicted labels
-                true_labels.append(class_index)
-                predicted_labels.append(predicted_class_index)
-            except Exception as e:
-                print(f"Error processing image {image_path}: {str(e)}")
-
-    if not true_labels:
-        raise ValueError("No images were successfully processed")
-
-    # Calculate performance metrics
-    accuracy = accuracy_score(true_labels, predicted_labels)
-    precision = precision_score(true_labels, predicted_labels,
-                                average='weighted')
-    recall = recall_score(true_labels, predicted_labels, average='weighted')
-    f1 = f1_score(true_labels, predicted_labels, average='weighted')
-
-    # Generate and plot confusion matrix
-    cm = confusion_matrix(true_labels, predicted_labels)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes)
-    plt.figure(figsize=(10, 8))
-    disp.plot(cmap=plt.cm.Blues, ax=plt.gca(), xticks_rotation=45)
-    plt.title("Confusion Matrix")
-
-    # Add performance metrics to the plot
-    metrics_text = (
-        f"Accuracy: {accuracy:.2f}\n"
-        f"Precision: {precision:.2f}\n"
-        f"Recall: {recall:.2f}\n"
-        f"F1-Score: {f1:.2f}"
+    model = ViTForImageClassification.from_pretrained(
+        "google/vit-base-patch16-224-in21k",
+        num_labels=num_classes
     )
-    plt.gca().text(1.2, 0.6, metrics_text, transform=plt.gca().transAxes,
-                   verticalalignment='top', bbox=dict(facecolor='white',
-                                                      alpha=0.5))
 
-    plt.show()
-
+    state_dict = torch.load(model_path, map_location=device)
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+    return model
 
 def predict_image(image_path, model_path, classes):
-    """
-    Predict a single image using a pre-trained model.
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found: {model_path}")
 
-    Args:
-        image_path (str): Path to the image.
-        model_path (str): Path to the trained model.
-        classes (list): List of class labels.
-    """
-    # Load the trained model
-    model = tf.keras.models.load_model(model_path)
+    model = load_model(model_path, num_classes=len(classes))
+    transform = get_transform()
 
-    # Preprocess the image
-    img = tf.keras.preprocessing.image.load_img(
-        image_path, target_size=(150, 150)
-    )
-    img_array = tf.keras.preprocessing.image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0) / 255.0
+    try:
+        img = Image.open(image_path).convert("RGB")
+        img_tensor = transform(img).unsqueeze(0).to(device)
 
-    # Make prediction
-    prediction = model.predict(img_array)
-    print(f"Prediction: {classes[np.argmax(prediction)]}")
+        with torch.no_grad():
+            outputs = model(img_tensor)
+            probs = F.softmax(outputs.logits, dim=1)
+            predicted_index = torch.argmax(probs, dim=1).item()
 
-
-# Unit tests
-APPLE_CLASSES = ['Black Rot', 'Healthy', 'Cedar Apple Rust', 'Apple Scab']
-GRAPE_CLASSES = ['Black Rot', 'Esca', 'Healthy', 'Spot']
-
-apple_model = 'model_leaves_attention_apple.h5'
-grape_model = 'model_leaves_attention_grape.h5'
+        print(f"{os.path.basename(image_path)} => Prediction: {classes[predicted_index]}")
+    except Exception as e:
+        print(f"Error predicting image {image_path}: {str(e)}")
 
 
-# Apple unit tests
-predict_image('./test_images/Unit_test1/Apple_Black_rot1.JPG', apple_model,
-              APPLE_CLASSES)
-predict_image('./test_images/Unit_test1/Apple_healthy1.JPG', apple_model,
-              APPLE_CLASSES)
-predict_image('./test_images/Unit_test1/Apple_healthy2.JPG', apple_model,
-              APPLE_CLASSES)
-predict_image('./test_images/Unit_test1/Apple_rust.JPG', apple_model,
-              APPLE_CLASSES)
-predict_image('./test_images/Unit_test1/Apple_scab.JPG', apple_model,
-              APPLE_CLASSES)
+if __name__ == '__main__':
 
-# Grape unit tests
-predict_image('./test_images/Unit_test2/Grape_Black_rot1.JPG', grape_model,
-              GRAPE_CLASSES)
-predict_image('./test_images/Unit_test2/Grape_Black_rot2.JPG', grape_model,
-              GRAPE_CLASSES)
-predict_image('./test_images/Unit_test2/Grape_Esca.JPG', grape_model,
-              GRAPE_CLASSES)
-predict_image('./test_images/Unit_test2/Grape_healthy.JPG',
-              grape_model, GRAPE_CLASSES)
-predict_image('./test_images/Unit_test2/Grape_spot.JPG',
-              grape_model, GRAPE_CLASSES)
+    APPLE_CLASSES = ['Black Rot', 'Healthy', 'Cedar Apple Rust', 'Apple Scab']
+    GRAPE_CLASSES = ['Black Rot', 'Esca', 'Healthy', 'Spot']
+
+    apple_model = 'model_vit_hf_apple_final.pth'
+    grape_model = 'model_vit_hf_grape_final.pth'
+
+
+    predict_image('./test_images/Unit_test1/Apple_Black_rot1.JPG', apple_model, APPLE_CLASSES)
+    predict_image('./test_images/Unit_test1/Apple_healthy1.JPG', apple_model, APPLE_CLASSES)
+    predict_image('./test_images/Unit_test1/Apple_healthy2.JPG', apple_model, APPLE_CLASSES)
+    predict_image('./test_images/Unit_test1/Apple_rust.JPG', apple_model, APPLE_CLASSES)
+    predict_image('./test_images/Unit_test1/Apple_scab.JPG', apple_model, APPLE_CLASSES)
+
+
+    predict_image('./test_images/Unit_test2/Grape_Black_rot1.JPG', grape_model, GRAPE_CLASSES)
+    predict_image('./test_images/Unit_test2/Grape_Black_rot2.JPG', grape_model, GRAPE_CLASSES)
+    predict_image('./test_images/Unit_test2/Grape_Esca.JPG', grape_model, GRAPE_CLASSES)
+    predict_image('./test_images/Unit_test2/Grape_healthy.JPG', grape_model, GRAPE_CLASSES)
+    predict_image('./test_images/Unit_test2/Grape_spot.JPG', grape_model, GRAPE_CLASSES)
