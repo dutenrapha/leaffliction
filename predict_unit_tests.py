@@ -60,9 +60,11 @@ def predict_image(image_path, model_path, classes):
             probs = F.softmax(outputs.logits, dim=1)
             predicted_index = torch.argmax(probs, dim=1).item()
 
-        print(f"{os.path.basename(image_path)} => Prediction:"
-              "{classes[predicted_index]}")
-        print({predicted_index})
+        print(
+            f"{os.path.basename(image_path)} => "
+            f"Prediction: {classes[predicted_index]}"
+        )
+
     except Exception as e:
         print(f"Error predicting image {image_path}: {str(e)}")
 
