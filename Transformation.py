@@ -62,18 +62,17 @@ def transform(origpath, output_path, show_img):
     thresholded = pcv.threshold.binary(gray_img=s,
                                        threshold=125, object_type='light')
 
-    # Usando cv2.findContours ao invés da função do PlantCV
     contours, hierarchy = cv2.findContours(thresholded,
                                            cv2.RETR_TREE,
                                            cv2.CHAIN_APPROX_SIMPLE)
 
-    # Criar uma máscara vazia
+    # Create a mask to keep only the contours
     kept_mask = np.zeros(img.shape[:2], dtype=np.uint8)
 
-    # Desenhar todos os contornos na máscara
+    # Draw contours on the mask
     cv2.drawContours(kept_mask, contours, -1, (255), -1)
 
-    # Salvar a máscara
+    # Save the mask
     cv2.imwrite(os.path.join(savedir, f"{filename}_contours_mask.jpg"),
                 kept_mask)
 

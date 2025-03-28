@@ -11,7 +11,8 @@ from sklearn.metrics import (
 from transformers import ViTForImageClassification
 
 
-def predict_directory(dir_path, model_path, image_size=(224, 224), device=None):
+def predict_directory(dir_path, model_path, image_size=(224, 224),
+                      device=None):
     """
     Predicts images in a directory using a pre-trained PyTorch model.
 
@@ -28,7 +29,6 @@ def predict_directory(dir_path, model_path, image_size=(224, 224), device=None):
         raise FileNotFoundError(f"The model '{model_path}' does not exist")
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-
 
     model = ViTForImageClassification.from_pretrained(
         "google/vit-base-patch16-224-in21k",
@@ -85,7 +85,8 @@ def predict_directory(dir_path, model_path, image_size=(224, 224), device=None):
 
     # Metrics
     accuracy = accuracy_score(true_labels, predicted_labels)
-    precision = precision_score(true_labels, predicted_labels, average='weighted')
+    precision = precision_score(true_labels, predicted_labels,
+                                average='weighted')
     recall = recall_score(true_labels, predicted_labels, average='weighted')
     f1 = f1_score(true_labels, predicted_labels, average='weighted')
 
@@ -107,6 +108,7 @@ def predict_directory(dir_path, model_path, image_size=(224, 224), device=None):
                    bbox=dict(facecolor='white', alpha=0.5))
 
     plt.show()
+
 
 if __name__ == '__main__':
     predict_directory('./test_dataset_apple', 'model_vit_hf_apple_final.pth')
